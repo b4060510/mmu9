@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Marine AI - Equipment Classifier</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .start-screen {
+            background-image: url('1.png'); /* 첫 번째 이미지 */
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+        }
+        .start-btn {
+            background-color: transparent;
+            border: none;
+            cursor: pointer;
+            position: absolute;
+            bottom: 10%; /* 버튼 위치 조정 */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 150px;  /* 버튼 크기 설정 */
+            height: 60px;
+        }
+        .camera-screen {
+            display: none;
+            position: relative;
+            background-image: url('2.png'); /* 두 번째 이미지 */
+            background-size: contain;
+            background-repeat: no-repeat;
+            background-position: center;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #webcam-container {
+            position: absolute;
+            top: 26%; /* 웹캠이 나올 위치 조정 (이미지의 검은색 부분과 맞춤) */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%; /* 검은색 영역에 맞는 크기 설정 */
+            height: 32%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden; /* 웹캠 화면이 넘어가지 않도록 설정 */
+            background-color: black;
+        }
+    </style>
+</head>
+<body>
+    <!-- 첫 번째 화면 (Start 버튼이 있는 화면) -->
+    <div class="start-screen" id="start-screen">
+        <button class="start-btn" onclick="startCamera()">Start</button>
+    </div>
+
+    <!-- 두 번째 화면 (웹캠 화면이 나오는 화면) -->
+    <div class="camera-screen" id="camera-screen">
+        <div id="webcam-container"></div>
+        <div class="label" id="label-container" style="margin-top: 50%;">종류: CO2 소화기, FOAM 소화기, POWDER 소화기</div>
+        <div class="maintenance-info" id="info-container">유지보수 방법: 검사, 확인, 교체주기, ...</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        const URL = "https://b4060510.github.io/mmumodel/";
+
+        let model, webcam, labelContainer, infoContainer, maxPredictions;
+
+        async function startCamera() {
+            // 첫 번째 화면 숨기기, 두 번째 화면 표시
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('camera-screen').style.display = 'flex';
+
+            // 모델 로드 및 웹캠 설정
+            try {
+                const modelURL = URL + "model.json";
+                const metadataURL = URL + "metadata.json";
+
+                model = await tmImage.load(modelURL, metadataURL);
+                maxPredictions = model.getTotalClasses();
+
+                // 웹캠 설정
+                const flip = false;
+                const width = 640;
+                const height = 480;
+                webcam = new tmImage.Webcam(width, height, flip);
+
+                // 웹캠 초기화
+                await webcam.setup({ facingMode: "environment" });
+                await webcam.play();
+                window.requestAnimationFrame(loop);
+
+                // 웹캠 화면을 DOM에 추가
+                document.getElementById("webcam-container").appendChild(webcam.canvas);
+                labelContainer = document.getElementById("label-container");
+                infoContainer = document.getElementById("info-container");
+            } catch (error) {
+                console.error("카메라를 시작하는 중 오류가 발생했습니다:", error);
+                alert("카메라를 사용할 수 없습니다. 권한 설정을 확인하거나 HTTPS 연결을 사용해주세요.");
+            }
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            try {
+                const prediction = await model.predict(webcam.canvas);
+                const highestPrediction = prediction.reduce((prev, current) => (prev.probability > current.probability) ? prev : current);
+
+                switch (highestPrediction.className) {
+                    case "powder":
+                        labelContainer.innerHTML = "파우더 감지됨";
+                        infoContainer.innerHTML = `유지보수 방법: 파우더 소화기의 유지보수 지침...`;
+                        break;
+                    case "foam":
+                        labelContainer.innerHTML = "폼 감지됨";
+                        infoContainer.innerHTML = `유지보수 방법: 폼 소화기의 유지보수 지침...`;
+                        break;
+                    default:
+                        labelContainer.innerHTML = "아무 항목도 감지되지 않았습니다.";
+                        infoContainer.innerHTML = "";
+                }
+            } catch (error) {
+                console.error("예측 중 오류가 발생했습니다:", error);
+            }
+        }
+    </script>
+</body>
+</html>
